@@ -1,59 +1,114 @@
-﻿    using System.Collections;
+﻿using System.Collections;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Android;
 
 public class LocationManager : MonoBehaviour
 {
     public TextMeshProUGUI GPS;
-    private void Start()
+    public TextMeshProUGUI north;
+    public TextMeshProUGUI one;
+    public TextMeshProUGUI two;
+    public Transform northObj;
+    bool isReady = false;
+    int index = 0;
+
+    private IEnumerator Start()
     {
+        // 1. 권한 요청
+        if (!Permission.HasUserAuthorizedPermission(Permission.FineLocation))
+        {
+            Permission.RequestUserPermission(Permission.FineLocation);
+
+            // 사용자가 권한 부여할 때까지 대기
+            float timeout = 10f;
+            while (!Permission.HasUserAuthorizedPermission(Permission.FineLocation) && timeout > 0)
+            {
+                yield return new WaitForSeconds(0.5f);
+                timeout -= 0.5f;
+            }
+        }
+
+        if (!Permission.HasUserAuthorizedPermission(Permission.FineLocation))
+        {
+            Debug.LogError("위치 권한 거부됨");
+            yield break;
+        }
+
+        // 2. 위치 서비스 켜져있는지 확인
+        if (!Input.location.isEnabledByUser)
+        {
+            Debug.LogError("기기 위치 서비스가 꺼져있음");
+            one.text = "기기 GPS 설정을 켜주세요";
+            yield break;
+        }
+
+        // 3. Location service 시작 (한 번만!)
+        Input.location.Start(1f, 0.1f);
+
+        // 4. 초기화 완료까지 대기
+        int wait = 20;
+        while (Input.location.status == LocationServiceStatus.Initializing && wait > 0)
+        {
+            yield return new WaitForSeconds(1);
+            wait--;
+        }
+
+        if (Input.location.status != LocationServiceStatus.Running)
+        {
+            Debug.LogError($"Location 초기화 실패: {Input.location.status}");
+            yield break;
+        }
+
+        // 5. Location 완전히 Running 된 후에 compass 켜기
+        Input.compass.enabled = true;
+
+        // 센서 안정화 대기
+        yield return new WaitForSeconds(1f);
+
+        isReady = true;
+
+        // 6. 두 코루틴 실행
         StartCoroutine(GetLocation());
+        StartCoroutine(GetCompass());
+    }
+
+    private IEnumerator GetCompass()
+    {
+        while (Input.location.status == LocationServiceStatus.Running)
+        {
+            one.text = $"Permission Granted: {Permission.HasUserAuthorizedPermission(Permission.FineLocation)}";
+            two.text = $"Compass Enabled: {Input.compass.enabled}\n" +
+                       $"True Heading: {Input.compass.trueHeading}\n" +
+                       $"Raw Vector: {Input.compass.rawVector}\n" +
+                       $"Timestamp: {Input.compass.timestamp}\n" +
+                       $"Gyro Supported: {SystemInfo.supportsGyroscope}\n" +
+                       $"Accelerometer: {SystemInfo.supportsAccelerometer}\n" +
+                       $"Device: {SystemInfo.deviceModel}";
+
+            if (isReady && Input.compass.enabled)
+            {
+                var heading = Input.compass.trueHeading;
+                north.text = $"Heading: {heading:F2}°";
+
+                Quaternion deviceRotation = Quaternion.Euler(0, heading, 0);
+                Quaternion cameraCorrection = Quaternion.Euler(90, 0, 0);
+                northObj.rotation = deviceRotation * cameraCorrection;
+            }
+
+            yield return new WaitForSeconds(0.1f); // compass는 짧게 갱신
+        }
     }
 
     private IEnumerator GetLocation()
     {
-        // 위치 서비스 활성화 여부 확인
-        if (!Input.location.isEnabledByUser)
+        // Input.location.Start() 여기서 다시 호출하지 않음!
+        while (Input.location.status == LocationServiceStatus.Running)
         {
-            Debug.Log("Location service is disabled.");
-            yield break;
+            index++;
+            LocationInfo location = Input.location.lastData;
+            GPS.text = $"{index}. Latitude: {location.latitude} Longitude: {location.longitude}";
+            yield return new WaitForSeconds(3);
         }
-
-        // 위치 서비스 시작 (정확도, 거리)
-        Input.location.Start(5f, 10f);
-
-        int maxWait = 20;
-        while (Input.location.status == LocationServiceStatus.Initializing && maxWait > 0)
-        {
-            yield return new WaitForSeconds(1);
-            maxWait--;
-        }
-
-        // 초기화 실패
-        if (maxWait <= 0)
-        {
-            Debug.Log("Timed out");
-            yield break;
-        }
-
-        // 실패 처리
-        if (Input.location.status == LocationServiceStatus.Failed)
-        {
-            Debug.Log("Unable to determine device location");
-            yield break;
-        }
-
-        // 성공
-        LocationInfo location = Input.location.lastData;
-
-        Debug.Log($"Latitude: {location.latitude}");
-        Debug.Log($"Longitude: {location.longitude}");
-        Debug.Log($"Altitude: {location.altitude}");
-        Debug.Log($"Accuracy: {location.horizontalAccuracy}");
-        Debug.Log($"Timestamp: {location.timestamp}");
-        GPS.text = $"Latitude: {location.latitude}\nLongitude: {location.longitude}";
-
-        // 필요 없으면 종료
-        Input.location.Stop();
     }
 }
