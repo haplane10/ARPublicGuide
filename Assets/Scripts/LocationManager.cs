@@ -9,7 +9,8 @@ public class LocationManager : MonoBehaviour
     public TextMeshProUGUI north;
     public TextMeshProUGUI one;
     public TextMeshProUGUI two;
-    public Transform northObj;
+    public Transform northVector;
+    public Transform pinPoint;
     bool isReady = false;
     int index = 0;
 
@@ -91,9 +92,9 @@ public class LocationManager : MonoBehaviour
                 var heading = Input.compass.trueHeading;
                 north.text = $"Heading: {heading:F2}°";
 
-                Quaternion deviceRotation = Quaternion.Euler(0, heading, 0);
-                Quaternion cameraCorrection = Quaternion.Euler(90, 0, 0);
-                northObj.rotation = deviceRotation * cameraCorrection;
+                Quaternion deviceRotation = Quaternion.Euler(0, -heading, 0);
+                northVector.rotation = deviceRotation;
+                pinPoint.position = northVector.forward * 2f; 
             }
 
             yield return new WaitForSeconds(0.1f); // compass는 짧게 갱신
@@ -110,5 +111,11 @@ public class LocationManager : MonoBehaviour
             GPS.text = $"{index}. Latitude: {location.latitude} Longitude: {location.longitude}";
             yield return new WaitForSeconds(3);
         }
+    }
+
+    void OnDisable()
+    {
+        Input.location.Stop();
+        Input.compass.enabled = false;
     }
 }
