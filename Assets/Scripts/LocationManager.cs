@@ -2,6 +2,7 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.Android;
+using UnityEngine.UI;
 
 public class LocationManager : MonoBehaviour
 {
@@ -10,9 +11,14 @@ public class LocationManager : MonoBehaviour
     public TextMeshProUGUI one;
     public TextMeshProUGUI two;
     public Transform northVector;
-    public Transform pinPoint;
+    public TextMeshProUGUI distance;
+    public Image arrowImage;
     bool isReady = false;
     int index = 0;
+
+    [Space] // 예시: 이수 메가박스
+    public float targetLatitude = 37.484684f; 
+    public float targetLongitude = 126.981636f;
 
     private IEnumerator Start()
     {
@@ -94,7 +100,6 @@ public class LocationManager : MonoBehaviour
 
                 Quaternion deviceRotation = Quaternion.Euler(0, -heading, 0);
                 northVector.rotation = deviceRotation;
-                pinPoint.position = northVector.forward * 2f; 
             }
 
             yield return new WaitForSeconds(0.1f); // compass는 짧게 갱신
@@ -108,9 +113,54 @@ public class LocationManager : MonoBehaviour
         {
             index++;
             LocationInfo location = Input.location.lastData;
-            GPS.text = $"{index}. Latitude: {location.latitude} Longitude: {location.longitude}";
-            yield return new WaitForSeconds(3);
+            float distance = GetDistanceInMeters(location, targetLatitude, targetLongitude);
+            float bearing = GetBearingInDegrees(location, targetLatitude, targetLongitude);
+            float deviceHeading = Input.compass.trueHeading;
+
+            // bearing - trueHeading = 화면 기준 목적지 방향
+            float relativeAngle = (bearing - deviceHeading + 360f) % 360f;
+
+            // UI 화살표 회전 (UI는 위가 0°, 시계방향 양수)
+            arrowImage.rectTransform.rotation = Quaternion.Euler(0, 0, -relativeAngle);
+
+            GPS.text = $"current Latitude: {location.latitude} Longitude: {location.longitude}";
+            this.distance.text = $"target {distance:F2}m";
+
+            yield return new WaitForSeconds(2);
         }
+    }
+
+    public static float GetDistanceInMeters(LocationInfo from, float toLat, float toLng)
+    {
+        const float R = 6371000f; // 지구 반지름 (m)
+
+        float lat1 = from.latitude * Mathf.Deg2Rad;
+        float lat2 = toLat * Mathf.Deg2Rad;
+        float dLat = (toLat - from.latitude) * Mathf.Deg2Rad;
+        float dLng = (toLng - from.longitude) * Mathf.Deg2Rad;
+
+        float a = Mathf.Sin(dLat / 2) * Mathf.Sin(dLat / 2)
+                + Mathf.Cos(lat1) * Mathf.Cos(lat2)
+                * Mathf.Sin(dLng / 2) * Mathf.Sin(dLng / 2);
+
+        float c = 2 * Mathf.Atan2(Mathf.Sqrt(a), Mathf.Sqrt(1 - a));
+
+        return R * c;
+    }
+
+    public static float GetBearingInDegrees(LocationInfo from, float toLat, float toLng)
+    {
+        float lat1 = from.latitude * Mathf.Deg2Rad;
+        float lat2 = toLat * Mathf.Deg2Rad;
+        float dLng = (toLng - from.longitude) * Mathf.Deg2Rad;
+
+        float y = Mathf.Sin(dLng) * Mathf.Cos(lat2);
+        float x = Mathf.Cos(lat1) * Mathf.Sin(lat2)
+                 - Mathf.Sin(lat1) * Mathf.Cos(lat2) * Mathf.Cos(dLng);
+
+        float bearing = Mathf.Atan2(y, x) * Mathf.Rad2Deg;
+
+        return (bearing + 360f) % 360f; // 0~360 정규화
     }
 
     void OnDisable()
