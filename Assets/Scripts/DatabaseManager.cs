@@ -9,7 +9,7 @@ public class DatabaseManager : MonoBehaviour
         _api = GetComponent<ApiManager>();
 
         // 전체 유저 조회
-        StartCoroutine(_api.GetAllUsers());
+       // StartCoroutine(_api.GetAllUsers());
 
         // ID로 조회
         StartCoroutine(_api.GetUserById(1));
